@@ -318,3 +318,183 @@ def get_dashboard_reviews(
         "total": len(records),
         "reviews": records,
     }
+
+
+import re
+
+# Specific customer concerns and suggested investigations
+CONCERN_PATTERNS = {
+    "Runs Small / Tight Fit": {
+        "Category": "Sizing / Fit",
+        "Patterns": [
+            r"\bruns?\s+(?:very\s+|a\s+bit\s+)?small\b",
+            r"\btoo\s+(?:tight|small|snug)\b",
+            r"\btight\s+(?:around|in|on)\b",
+            r"\bsize\s+up\b",
+            r"\bconstricting\b",
+        ],
+        "Recommendation": (
+            "Review garment measurements and sizing specifications. "
+            "Consider updating size guidance or future production specifications."
+        ),
+    },
+    "Runs Large / Loose Fit": {
+        "Category": "Sizing / Fit",
+        "Patterns": [
+            r"\bruns?\s+(?:very\s+|a\s+bit\s+)?(?:large|big)\b",
+            r"\btoo\s+(?:loose|big|large)\b",
+            r"\bsize\s+down\b",
+            r"\bbaggy\b",
+        ],
+        "Recommendation": (
+            "Review garment measurements and fit consistency. "
+            "Consider improving size guidance or adjusting future production specifications."
+        ),
+    },
+    "Zipper / Fastener Failure": {
+        "Category": "Product Defect",
+        "Patterns": [
+            r"\bzipper\b.*\b(?:broke|broken|stuck|failed)\b",
+            r"\b(?:button|zipper)\b.*\b(?:fell|came)\s+off\b",
+        ],
+        "Recommendation": (
+            "Inspect fastener durability and review component quality "
+            "with relevant suppliers before future production."
+        ),
+    },
+    "Stitching / Seam Failure": {
+        "Category": "Product Defect",
+        "Patterns": [
+            r"\bstitch(?:ing|es)?\b.*\b(?:loose|broke|came|fell)\b",
+            r"\bseam\b.*\b(?:split|ripped|torn|came)\b",
+            r"\bcame\s+apart\b",
+        ],
+        "Recommendation": (
+            "Investigate stitching durability and manufacturing "
+            "quality-control specifications."
+        ),
+    },
+    "Thin / Poor Fabric Quality": {
+        "Category": "Material / Quality",
+        "Patterns": [
+            r"\b(?:too|very)\s+thin\b",
+            r"\bsee.through\b",
+            r"\bpoor\s+quality\b",
+            r"\bcheap\s+(?:fabric|material|quality)\b",
+            r"\bitchy\b|\bscratchy\b",
+        ],
+        "Recommendation": (
+            "Review fabric specifications and material quality "
+            "before considering changes to future product batches."
+        ),
+    },
+    "Incorrect Item Delivered": {
+        "Category": "Misdelivery",
+        "Patterns": [
+            r"\bwrong\s+(?:item|product|size|colou?r)\b",
+            r"\breceived\s+(?:the\s+)?wrong\b",
+        ],
+        "Recommendation": (
+            "Investigate order picking, packing and fulfilment accuracy."
+        ),
+    },
+}
+
+COMPILED_CONCERNS = {
+    name: re.compile("|".join(config["Patterns"]), re.IGNORECASE)
+    for name, config in CONCERN_PATTERNS.items()
+}
+
+
+def consolidate_feedback(data, group_column="Class Name", min_reviews=2):
+    """Identify recurring concerns supported by complaint predictions and text."""
+    records = []
+
+    for group_name, group in data.groupby(group_column, dropna=True):
+        for concern, config in CONCERN_PATTERNS.items():
+            category = config["Category"]
+
+            matches = group[
+                group[f"Integrated_{category}"].eq(2)
+                & group["Review Text"].fillna("").str.contains(
+                    COMPILED_CONCERNS[concern],
+                    regex=True
+                )
+            ]
+
+            if len(matches) < min_reviews:
+                continue
+
+            records.append({
+                "Group": group_name,
+                "Concern": concern,
+                "Issue Category": category,
+                "Supporting Reviews": len(matches),
+                "Group Reviews": len(group),
+                "Recommendation": config["Recommendation"],
+                "Review IDs": (
+                    matches["Original_Index"].astype(int).tolist()
+                ),
+            })
+
+    if not records:
+        return pd.DataFrame(columns=[
+            "Group", "Concern", "Issue Category",
+            "Supporting Reviews", "Group Reviews",
+            "Recommendation", "Review IDs",
+        ])
+
+    return pd.DataFrame(records).sort_values(
+        ["Supporting Reviews", "Group", "Concern"],
+        ascending=[False, True, True]
+    )
+
+
+def get_product_intelligence(sample="random"):
+    """Format recurring concern patterns for the React dashboard."""
+    data = filter_sample(sample)
+
+    category_findings = consolidate_feedback(
+        data, group_column="Class Name", min_reviews=2
+    )
+    product_findings = consolidate_feedback(
+        data, group_column="Clothing ID", min_reviews=2
+    )
+
+    def format_findings(frame, level):
+        findings = []
+
+        for _, row in frame.iterrows():
+            findings.append({
+                "level": level,
+                "group": (
+                    int(row["Group"])
+                    if level == "product"
+                    else str(row["Group"])
+                ),
+                "concern": row["Concern"],
+                "issue_category": row["Issue Category"],
+                "supporting_reviews": int(row["Supporting Reviews"]),
+                "group_reviews": int(row["Group Reviews"]),
+                "recommendation": row["Recommendation"],
+                "review_ids": [
+                    int(value) for value in row["Review IDs"]
+                ],
+            })
+
+        return findings
+
+    return {
+        "sample": sample,
+        "sample_size": len(data),
+        "category_insights": format_findings(
+            category_findings, "category"
+        ),
+        "product_insights": format_findings(
+            product_findings, "product"
+        ),
+        "note": (
+            "Preliminary patterns from AI-detected complaints "
+            "and keyword matching; not confirmed product defects."
+        ),
+    }

@@ -86,3 +86,17 @@ def dashboard_reviews_by_ids(
         sample=sample,
         ids=requested_ids,
     )
+
+
+from backend.analytics import get_product_intelligence
+
+
+@app.get("/api/dashboard/product-intelligence")
+def product_intelligence(sample: str = "random"):
+    if sample not in VALID_SAMPLES:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid sample. Choose random, enriched or all."
+        )
+
+    return get_product_intelligence(sample)
