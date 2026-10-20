@@ -903,11 +903,11 @@ function ProductIntelligence({ filters, onExplore }) {
   )
 }
 
+
 const navigation = [
-  { name: 'Retail Intelligence', icon: LayoutDashboard },
-  { name: 'AI Review Inspector', icon: ScanSearch },
-  { name: 'Investigation Workspace', icon: ClipboardList }
+  { name: 'Retail Intelligence', icon: LayoutDashboard }
 ]
+
 
 export default function App() {
   const [selection, setSelection] = useState(null)
