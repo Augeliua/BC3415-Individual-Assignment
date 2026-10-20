@@ -4,11 +4,15 @@ import pandas as pd
 
 # Locate the dataset relative to the project,
 # regardless of where the server is launched.
-DATA_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "data"
-    / "retailsense_dashboard.csv"
-)
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+# Preserve the original development dataset
+DEVELOPMENT_DATA_PATH = DATA_DIR / "retailsense_dashboard.csv"
+
+# Main dataset for RetailSense operational analytics
+DATA_PATH = DATA_DIR / "retailsense_operational.csv"
+
 
 ISSUE_CATEGORIES = [
     "Product Defect",
@@ -30,7 +34,6 @@ def load_dashboard_data():
 
     required = [
         "Original_Index",
-        "Sample_Type",
         "Review Text",
         "Sentiment",
         "Priority",
@@ -59,42 +62,87 @@ def load_dashboard_data():
 dashboard_data = load_dashboard_data()
 
 
+
+
+def filter_dashboard_data(
+    category=None,
+    priority=None,
+    sentiment=None,
+):
+    """Apply the same business filters across dashboard features."""
+    data = dashboard_data.copy()
+
+    if category not in (None, "", "all"):
+        if category not in set(data["Class Name"].dropna()):
+            raise ValueError("Invalid clothing category.")
+        data = data[data["Class Name"] == category]
+
+    if priority not in (None, "", "all"):
+        if priority not in ("High", "Medium", "None"):
+            raise ValueError("Invalid priority.")
+        data = data[
+            data["Priority"].fillna("None").replace("", "None")
+            == priority
+        ]
+
+    if sentiment not in (None, "", "all"):
+        if sentiment not in ("Positive", "Neutral", "Negative"):
+            raise ValueError("Invalid sentiment.")
+        data = data[data["Sentiment"] == sentiment]
+
+    return data
+
+
+def get_available_filters():
+    """Provide clothing categories directly from the dataset."""
+    return {
+        "categories": sorted(
+            dashboard_data["Class Name"].dropna().unique().tolist()
+        ),
+        "priorities": ["High", "Medium", "None"],
+        "sentiments": ["Positive", "Neutral", "Negative"],
+    }
+
+
+# Retain compatibility temporarily while we update existing endpoints.
 def filter_sample(sample="random"):
     if sample not in VALID_SAMPLES:
         raise ValueError("Invalid sample.")
+    return filter_dashboard_data()
 
-    selected = VALID_SAMPLES[sample]
 
-    if selected is None:
-        return dashboard_data.copy()
 
-    return dashboard_data[
-        dashboard_data["Sample_Type"] == selected
-    ].copy()
 
 
 def get_dataset_info():
     return {
         "total_reviews": len(dashboard_data),
-        "random_reviews": int(
-            (dashboard_data["Sample_Type"] == "Random").sum()
-        ),
-        "enriched_reviews": int(
-            (dashboard_data["Sample_Type"] == "Enriched").sum()
-        ),
         "unique_products": int(
             dashboard_data["Clothing ID"].nunique()
         ),
         "product_categories": int(
             dashboard_data["Class Name"].nunique()
         ),
+        "data_source": "Historical Operational Demo"
     }
 
 
-def get_dashboard_summary(sample="random"):
-    """Generate dashboard metrics from saved AI predictions."""
-    data = filter_sample(sample)
+
+
+def get_dashboard_summary(
+    sample="random",
+    category=None,
+    priority=None,
+    sentiment=None,
+):
+    """Generate dashboard metrics using operational business filters."""
+    data = filter_dashboard_data(
+        category=category,
+        priority=priority,
+        sentiment=sentiment,
+    )
     total = len(data)
+
 
     # A review is flagged if at least one issue is a complaint (2)
     complaint_columns = [
@@ -122,7 +170,7 @@ def get_dashboard_summary(sample="random"):
         ),
     }
 
-    sentiment = {
+    sentiment_counts = {
         name: int(data["Sentiment"].eq(name).sum())
         for name in ["Positive", "Neutral", "Negative"]
     }
@@ -152,32 +200,21 @@ def get_dashboard_summary(sample="random"):
                     ),
                 })
 
-    sample_notes = {
-        "random": (
-            "Random development sample of 100 reviews. "
-            "AI predictions are preliminary and may contain "
-            "classification errors."
-        ),
-        "enriched": (
-            "Issue-enriched development sample of 50 reviews. "
-            "This intentionally contains more potential complaints "
-            "and is not representative of overall prevalence."
-        ),
-        "all": (
-            "Combined development sample of 150 reviews "
-            "(100 random and 50 issue-enriched). "
-            "This is not a representative retail-wide sample."
-        ),
-    }
+
+    sample_note = (
+        "Analysis of historical customer reviews using RetailSense AI "
+        "predictions. Filters apply consistently across dashboard metrics. "
+        "Findings are preliminary and do not represent verified defects."
+    )
 
     return {
-        "sample": sample,
         "sample_size": total,
         "kpis": kpis,
-        "sentiment": sentiment,
+        "sentiment": sentiment_counts,
         "issue_breakdown": breakdown,
-        "sample_note": sample_notes[sample],
+        "sample_note": sample_note,
     }
+
 
 
 import ast
@@ -222,9 +259,16 @@ def get_dashboard_reviews(
     priority=None,
     flagged=None,
     ids=None,
+    clothing_category=None,
+    dashboard_priority=None,
+    dashboard_sentiment=None,
 ):
     """Return underlying reviews for dashboard drill-downs."""
-    data = filter_sample(sample)
+    data = filter_dashboard_data(
+    category=clothing_category,
+    priority=dashboard_priority,
+    sentiment=dashboard_sentiment,
+)
 
     if sentiment:
         data = data[data["Sentiment"] == sentiment]
@@ -311,7 +355,7 @@ def get_dashboard_reviews(
             "review_status": safe_text(
                 row.get("Review Status", "AI Prediction")
             ),
-            "sample_type": safe_text(row["Sample_Type"]),
+            "sample_type": safe_text(row.get("Data_Source", "Operational")),
         })
 
     return {
@@ -450,9 +494,20 @@ def consolidate_feedback(data, group_column="Class Name", min_reviews=2):
     )
 
 
-def get_product_intelligence(sample="random"):
-    """Format recurring concern patterns for the React dashboard."""
-    data = filter_sample(sample)
+
+def get_product_intelligence(
+    sample="random",
+    clothing_category=None,
+    dashboard_priority=None,
+    dashboard_sentiment=None,
+):
+    """Find recurring concerns within the selected dashboard segment."""
+    data = filter_dashboard_data(
+        category=clothing_category,
+        priority=dashboard_priority,
+        sentiment=dashboard_sentiment,
+    )
+
 
     category_findings = consolidate_feedback(
         data, group_column="Class Name", min_reviews=2

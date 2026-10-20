@@ -329,7 +329,7 @@ function IssueChart({ breakdown, onExplore }) {
 }
 
 
-function ReviewExplorer({ selection, sample, onClose }) {
+function ReviewExplorer({ selection, filters, onClose }) {
   const [reviews, setReviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -349,15 +349,29 @@ function ReviewExplorer({ selection, sample, onClose }) {
     setSearch('')
     setPage(1)
 
-    const params = new URLSearchParams({
-      sample,
-      ...selection.params
-    })
+    const commonFilters = {
+      clothing_category: filters.category,
+      dashboard_priority: filters.priority,
+      dashboard_sentiment: filters.sentiment
+    }
+
+    const params = new URLSearchParams(
+      Object.entries({
+        ...commonFilters,
+        ...selection.params
+      }).filter(([, value]) => value !== '' && value != null)
+    )
 
     fetch(
       selection.ids
         ? `/api/dashboard/reviews/by-ids?${new URLSearchParams({
-            sample,
+            ...Object.fromEntries(
+              Object.entries({
+                clothing_category: filters.category,
+                dashboard_priority: filters.priority,
+                dashboard_sentiment: filters.sentiment
+              }).filter(([, value]) => value)
+            ),
             ids: selection.ids.join(',')
           })}`
         : `/api/dashboard/reviews?${params}`,
@@ -377,7 +391,7 @@ function ReviewExplorer({ selection, sample, onClose }) {
       })
 
     return () => controller.abort()
-  }, [sample, selection])
+  }, [filters, selection])
 
   useEffect(() => {
     function handleEscape(e) {
@@ -452,7 +466,7 @@ function ReviewExplorer({ selection, sample, onClose }) {
             <h2 className="text-xl font-semibold mt-1">{selection.title}</h2>
             <p className="text-sm text-slate-500 mt-1">
               {loading ? 'Loading reviews...' :
-                `${reviews.length} matching reviews · ${sample} sample`}
+                `${reviews.length} matching reviews · current filters`}
             </p>
           </div>
           <button onClick={onClose} aria-label="Close Review Explorer"
@@ -638,9 +652,12 @@ function ReviewExplorer({ selection, sample, onClose }) {
 
 
 
-function ProductIntelligence({ sample, onExplore }) {
+function ProductIntelligence({ filters, onExplore }) {
   const [data, setData] = useState(null)
   const [level, setLevel] = useState('category')
+  const [concernSearch, setConcernSearch] = useState('')
+  const [concernSort, setConcernSort] = useState('count')
+  const [showAllConcerns, setShowAllConcerns] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -649,8 +666,15 @@ function ProductIntelligence({ sample, onExplore }) {
     setLoading(true)
     setData(null)
     setError('')
+    setShowAllConcerns(false)
 
-    fetch(`/api/dashboard/product-intelligence?sample=${sample}`, {
+    fetch(`/api/dashboard/product-intelligence?${new URLSearchParams(
+      Object.entries({
+        clothing_category: filters.category,
+        dashboard_priority: filters.priority,
+        dashboard_sentiment: filters.sentiment
+      }).filter(([, value]) => value)
+    )}`, {
       signal: controller.signal
     })
       .then(response => {
@@ -668,13 +692,38 @@ function ProductIntelligence({ sample, onExplore }) {
       })
 
     return () => controller.abort()
-  }, [sample])
+  }, [filters])
 
   const findings = level === 'category'
     ? (data?.category_insights ?? [])
     : (data?.product_insights ?? [])
 
-  const selected = findings.slice(0, 8)
+  const matchingFindings = findings
+    .filter(finding => {
+      const query = concernSearch.toLowerCase().trim()
+      return !query || [
+        finding.group,
+        finding.concern,
+        finding.issue_category
+      ].join(' ').toLowerCase().includes(query)
+    })
+    .sort((a, b) => {
+      if (concernSort === 'proportion') {
+        const aRate = a.group_reviews
+          ? a.supporting_reviews / a.group_reviews : 0
+        const bRate = b.group_reviews
+          ? b.supporting_reviews / b.group_reviews : 0
+
+        return bRate - aRate ||
+          b.supporting_reviews - a.supporting_reviews
+      }
+
+      return b.supporting_reviews - a.supporting_reviews
+    })
+
+  const selected = showAllConcerns
+    ? matchingFindings
+    : matchingFindings.slice(0, 8)
 
   return (
     <section className="mt-6 space-y-5">
@@ -712,6 +761,32 @@ function ProductIntelligence({ sample, onExplore }) {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-3 items-center">
+        <input
+          type="search"
+          aria-label="Search recurring concerns"
+          value={concernSearch}
+          onChange={e => {
+            setConcernSearch(e.target.value)
+            setShowAllConcerns(false)
+          }}
+          placeholder="Search category, product ID or concern..."
+          className="bg-white border border-slate-200 rounded-xl
+            px-4 py-2.5 text-sm flex-1 min-w-52 outline-none
+            focus:ring-2 focus:ring-blue-200"
+        />
+        <select
+          aria-label="Sort recurring concerns"
+          value={concernSort}
+          onChange={e => setConcernSort(e.target.value)}
+          className="bg-white border border-slate-200 rounded-xl
+            px-3 py-2.5 text-sm"
+        >
+          <option value="count">Most reported</option>
+          <option value="proportion">Highest proportion</option>
+        </select>
+      </div>
+
       {loading && (
         <Card className="p-6 text-slate-500">
           Loading recurring customer concerns...
@@ -741,6 +816,17 @@ function ProductIntelligence({ sample, onExplore }) {
 
       {!loading && !error && findings.length > 0 && (
         <>
+          <p className="text-xs text-slate-500">
+            Showing {selected.length} of {matchingFindings.length}
+            {' '}matching patterns
+          </p>
+
+          {matchingFindings.length === 0 && (
+            <Card className="p-6 text-sm text-slate-500">
+              No concerns match your search.
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {selected.map((finding, index) => (
               <Card key={`${level}-${finding.group}-${finding.concern}-${index}`}
@@ -793,6 +879,20 @@ function ProductIntelligence({ sample, onExplore }) {
             ))}
           </div>
 
+          {matchingFindings.length > 8 && (
+            <button
+              onClick={() => setShowAllConcerns(value => !value)}
+              className="mx-auto block rounded-xl border
+                border-slate-200 bg-white px-5 py-2.5
+                text-sm font-semibold text-blue-700
+                hover:bg-blue-50"
+            >
+              {showAllConcerns
+                ? 'Show Less'
+                : `Show More (${matchingFindings.length - 8} remaining)`}
+            </button>
+          )}
+
           <p className="text-xs text-slate-500">
             {data.note} Patterns across clothing categories may involve
             different product designs.
@@ -811,16 +911,39 @@ const navigation = [
 
 export default function App() {
   const [selection, setSelection] = useState(null)
-  const [sample, setSample] = useState('random')
+  const [filters, setFilters] = useState({
+    category: '',
+    priority: '',
+    sentiment: ''
+  })
+  const [filterOptions, setFilterOptions] = useState(null)
   const [dashboard, setDashboard] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
 
   useEffect(() => {
+    fetch('/api/dashboard/filters')
+      .then(response => {
+        if (!response.ok) throw new Error('Unable to load filters')
+        return response.json()
+      })
+      .then(setFilterOptions)
+      .catch(console.error)
+  }, [])
+
+  const filterQuery = new URLSearchParams(
+    Object.entries({
+      category: filters.category,
+      priority: filters.priority,
+      sentiment: filters.sentiment
+    }).filter(([, value]) => value)
+  ).toString()
+
+  useEffect(() => {
     const controller = new AbortController()
 
-    fetch(`/api/dashboard?sample=${sample}`, {
+    fetch(`/api/dashboard?${filterQuery}`, {
       signal: controller.signal
     })
       .then(response => {
@@ -833,7 +956,7 @@ export default function App() {
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
-          setError('Unable to load dashboard data. Check the Colab API server.')
+          setError('Unable to load dashboard data. Check the FastAPI server.')
           setDashboard(null)
         }
       })
@@ -842,12 +965,13 @@ export default function App() {
       })
 
     return () => controller.abort()
-  }, [sample, refresh])
+  }, [filterQuery, refresh])
 
-  function changeSample(next) {
+  function changeFilter(key, value) {
     setDashboard(null)
     setLoading(true)
-    setSample(next)
+    setFilters(previous => ({ ...previous, [key]: value }))
+    setSelection(null)
   }
 
   return (
@@ -898,24 +1022,42 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="relative">
+              {[
+                {
+                  key: 'category',
+                  label: 'Product category',
+                  options: filterOptions?.categories ?? [],
+                  all: 'All Categories'
+                },
+                {
+                  key: 'priority',
+                  label: 'Priority',
+                  options: ['High', 'Medium', 'None'],
+                  all: 'All Priorities'
+                },
+                {
+                  key: 'sentiment',
+                  label: 'Sentiment',
+                  options: ['Positive', 'Neutral', 'Negative'],
+                  all: 'All Sentiments'
+                }
+              ].map(config => (
                 <select
-                  aria-label="Development sample"
-                  value={sample}
-                  onChange={e => changeSample(e.target.value)}
-                  className="appearance-none bg-white border border-slate-200
-                    rounded-xl py-2.5 pl-4 pr-10 text-sm shadow-sm"
+                  key={config.key}
+                  aria-label={config.label}
+                  value={filters[config.key]}
+                  onChange={e => changeFilter(config.key, e.target.value)}
+                  className="bg-white border border-slate-200 rounded-xl
+                    py-2.5 px-3 text-sm shadow-sm max-w-48"
                 >
-                  <option value="random">Random sample</option>
-                  <option value="enriched">Issue-enriched sample</option>
-                  <option value="all">Combined samples</option>
+                  <option value="">{config.all}</option>
+                  {config.options.map(value => (
+                    <option key={value} value={value}>
+                      {value === 'None' ? 'No Priority' : value}
+                    </option>
+                  ))}
                 </select>
-                <ChevronDown
-                  size={15}
-                  className="pointer-events-none absolute right-3 top-3
-                    text-slate-500"
-                />
-              </div>
+              ))}
               <button
                 aria-label="Refresh dashboard"
                 title="Refresh dashboard"
@@ -964,7 +1106,7 @@ export default function App() {
               </div>
 
               <ProductIntelligence
-                sample={sample}
+                filters={filters}
                 onExplore={setSelection}
               />
 
@@ -980,7 +1122,7 @@ export default function App() {
                     </p>
                     <p className="text-xs text-slate-400 mt-2">
                       Showing {dashboard.sample_size} reviews.
-                      This is not the complete retail review dataset.
+                      Historical review sample; not a live retailer data feed.
                     </p>
                   </div>
                 </div>
@@ -992,7 +1134,7 @@ export default function App() {
       {selection && (
         <ReviewExplorer
           selection={selection}
-          sample={sample}
+          filters={filters}
           onClose={() => setSelection(null)}
         />
       )}

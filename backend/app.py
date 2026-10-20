@@ -22,36 +22,54 @@ def health():
     }
 
 
-@app.get("/api/dashboard")
-def dashboard(sample: str = "random"):
-    if sample not in VALID_SAMPLES:
-        raise HTTPException(
-            status_code=422,
-            detail="Invalid sample. Choose random, enriched or all."
-        )
 
-    return get_dashboard_summary(sample)
+from backend.analytics import get_available_filters
+
+@app.get("/api/dashboard/filters")
+def dashboard_filters():
+    """Return available business filters."""
+    return get_available_filters()
+
+
+@app.get("/api/dashboard")
+def dashboard(
+    category: str | None = None,
+    priority: str | None = None,
+    sentiment: str | None = None,
+):
+    """Return filtered operational dashboard analytics."""
+    try:
+        return get_dashboard_summary(
+            category=category,
+            priority=priority,
+            sentiment=sentiment,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+
 
 
 from fastapi import Query
 from backend.analytics import get_dashboard_reviews
 
 
+
 @app.get("/api/dashboard/reviews")
 def dashboard_reviews(
-    sample: str = "random",
+    clothing_category: str | None = None,
+    dashboard_priority: str | None = None,
+    dashboard_sentiment: str | None = None,
     sentiment: str | None = None,
     category: str | None = None,
     scope: str = "Complaints",
     priority: str | None = None,
     flagged: bool | None = None,
 ):
-    if sample not in VALID_SAMPLES:
-        raise HTTPException(422, "Invalid sample.")
-
     try:
         return get_dashboard_reviews(
-            sample=sample,
+            clothing_category=clothing_category,
+            dashboard_priority=dashboard_priority,
+            dashboard_sentiment=dashboard_sentiment,
             sentiment=sentiment,
             category=category,
             scope=scope,
@@ -62,14 +80,14 @@ def dashboard_reviews(
         raise HTTPException(422, str(error))
 
 
+
 @app.get("/api/dashboard/reviews/by-ids")
 def dashboard_reviews_by_ids(
     ids: str = Query(...),
-    sample: str = "random",
+    clothing_category: str | None = None,
+    dashboard_priority: str | None = None,
+    dashboard_sentiment: str | None = None,
 ):
-    if sample not in VALID_SAMPLES:
-        raise HTTPException(422, "Invalid sample.")
-
     try:
         requested_ids = [
             int(item.strip())
@@ -79,24 +97,37 @@ def dashboard_reviews_by_ids(
     except ValueError:
         raise HTTPException(422, "Invalid review IDs.")
 
-    if not requested_ids or len(requested_ids) > 150:
-        raise HTTPException(422, "Provide 1–150 review IDs.")
+    if not requested_ids or len(requested_ids) > 1500:
+        raise HTTPException(422, "Provide 1–1500 review IDs.")
 
-    return get_dashboard_reviews(
-        sample=sample,
-        ids=requested_ids,
-    )
+    try:
+        return get_dashboard_reviews(
+            clothing_category=clothing_category,
+            dashboard_priority=dashboard_priority,
+            dashboard_sentiment=dashboard_sentiment,
+            ids=requested_ids,
+        )
+    except ValueError as error:
+        raise HTTPException(422, str(error))
+
 
 
 from backend.analytics import get_product_intelligence
 
 
-@app.get("/api/dashboard/product-intelligence")
-def product_intelligence(sample: str = "random"):
-    if sample not in VALID_SAMPLES:
-        raise HTTPException(
-            status_code=422,
-            detail="Invalid sample. Choose random, enriched or all."
-        )
 
-    return get_product_intelligence(sample)
+@app.get("/api/dashboard/product-intelligence")
+def product_intelligence(
+    clothing_category: str | None = None,
+    dashboard_priority: str | None = None,
+    dashboard_sentiment: str | None = None,
+):
+    try:
+        return get_product_intelligence(
+            clothing_category=clothing_category,
+            dashboard_priority=dashboard_priority,
+            dashboard_sentiment=dashboard_sentiment,
+        )
+    except ValueError as error:
+        raise HTTPException(422, str(error))
+
