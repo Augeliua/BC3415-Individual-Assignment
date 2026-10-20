@@ -893,10 +893,7 @@ function ProductIntelligence({ filters, onExplore }) {
             </button>
           )}
 
-          <p className="text-xs text-slate-500">
-            {data.note} Patterns across clothing categories may involve
-            different product designs.
-          </p>
+          
         </>
       )}
     </section>
@@ -975,51 +972,23 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen lg:flex bg-[#F6F8FB] text-slate-900">
-      <aside className="bg-white border-b lg:border-b-0 lg:border-r
-        border-slate-200 lg:w-64 lg:min-h-screen lg:shrink-0 p-6">
-        <h1 className="text-2xl font-bold tracking-tight">RetailSense</h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Customer Experience Intelligence
-        </p>
-
-        <nav className="mt-8 space-y-2">
-          {navigation.map(({ name, icon: Icon }, index) => (
-            <div
-              key={name}
-              className={`flex items-center gap-3 rounded-xl p-3 text-sm ${
-                index === 0
-                  ? 'bg-blue-50 text-blue-700 font-semibold'
-                  : 'text-slate-400'
-              }`}
-              title={index ? 'Coming in a later section' : name}
-              aria-current={index === 0 ? 'page' : undefined}
-            >
-              <Icon size={18} />
-              {name}
-              {index !== 0 && (
-                <span className="ml-auto text-[10px]">Soon</span>
-              )}
-            </div>
-          ))}
-        </nav>
-      </aside>
+    <div className="min-h-screen bg-[#F6F8FB] text-slate-900">
 
       <main className="flex-1 min-w-0 px-5 py-8 lg:px-10 lg:py-10">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row
             sm:justify-between sm:items-end gap-5 mb-8">
-            <div>
-              <p className="text-xs font-semibold tracking-widest text-blue-700">
-                CUSTOMER EXPERIENCE OVERVIEW
-              </p>
-              <h2 className="text-3xl font-semibold mt-2">
-                Retail Intelligence
-              </h2>
-              <p className="text-sm text-slate-500 mt-2">
-                Monitor feedback. Identify concerns. Prioritise attention.
-              </p>
-            </div>
+              <div>
+  <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+    RetailSense
+  </h1>
+  <p className="text-xs font-semibold tracking-widest text-blue-700 mt-3">
+    CUSTOMER EXPERIENCE OVERVIEW
+  </p>
+  <p className="text-sm text-slate-500 mt-2">
+    Monitor feedback. Identify concerns. Prioritise attention.
+  </p>
+</div>
 
             <div className="flex items-center gap-2">
               {[
@@ -1109,24 +1078,6 @@ export default function App() {
                 filters={filters}
                 onExplore={setSelection}
               />
-
-              <Card className="p-5 mt-6">
-                <div className="flex items-start gap-3">
-                  <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h3 className="font-semibold text-sm">
-                      About this analysis
-                    </h3>
-                    <p className="text-sm text-slate-500 mt-1">
-                      {dashboard.sample_note}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-2">
-                      Showing {dashboard.sample_size} reviews.
-                      Historical review sample; not a live retailer data feed.
-                    </p>
-                  </div>
-                </div>
-              </Card>
             </>
           )}
         </div>
