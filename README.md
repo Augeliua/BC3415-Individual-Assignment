@@ -24,8 +24,6 @@ Raw Customer Reviews → Data Preprocessing → Sentiment Classification → Com
 
 ## 2. Live Application
 
-**Access RetailSense:** https://retailsense-api-u6yw.onrender.com/
-
 The dashboard analyses **1,500 historical customer reviews**, covering **319 clothing IDs** and **20 product classes**.
 
 ### Key Features
