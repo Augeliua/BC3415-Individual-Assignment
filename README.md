@@ -14,7 +14,7 @@ The project combines sentiment classification, hybrid complaint detection, expla
 RetailSense consists of two components:
 
 1. **Google Colab NLP Pipeline:** Develops and evaluates sentiment classification models, detects product-related complaints, assigns priorities, and generates review-level predictions.
-2. **RetailSense Web Application:** Uses React and FastAPI to present AI-generated insights through an interactive dashboard.
+2. **RetailSense Web Application:** Uses React and FastAPI to present insights through an interactive dashboard.
 
 **End-to-end workflow:**
 
